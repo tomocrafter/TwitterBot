@@ -137,6 +137,7 @@ func checkCanReply() (bool, bool) {
 func changeName(name string, client *twitter.Client) {
 	_, _, _ = client.Accounts.UpdateProfile(&twitter.AccountProfileParams{
 		Name:       name,
+		IncludeEntities: twitter.Bool(false),
 		SkipStatus: twitter.Bool(true),
 	})
 }
