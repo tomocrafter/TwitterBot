@@ -78,9 +78,6 @@ func TimeCommand(s CommandSender, args []string) (err error) {
 			sb.WriteString("時間:")
 			sb.WriteString(formatTime(t))
 			sb.WriteString(" (3:34ちょうどの時間から ")
-			if diff > 0 {
-				sb.WriteByte('+')
-			}
 			// 本来であればfmtの%+.3fは0.0009の場合0.001に四捨五入されてしまうため切り捨てしているが、
 			// 実際にはTwitterのタイムスタンプには.000までしかないため切り捨てしなくても問題ない。作者の性格に依存している。
 			sb.WriteString(fmt.Sprintf("%+.3f", roundDown(diff, 3)))

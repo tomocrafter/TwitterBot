@@ -32,6 +32,7 @@ var (
 )
 
 func init() {
+	go loadClientBlackList()
 	file, err := ioutil.ReadFile("config.json")
 	if err != nil {
 		panic(err)
@@ -118,8 +119,6 @@ func isBlackListed(via string) bool {
 
 func main() {
 	gin.SetMode(gin.ReleaseMode)
-
-	go loadClientBlackList()
 
 	db, err := sql.Open("mysql", botConfig.MySQL.User+":"+botConfig.MySQL.Password+"@unix(/var/lib/mysql/mysql.sock)/"+botConfig.MySQL.DB+"?parseTime=true")
 	if err != nil {
