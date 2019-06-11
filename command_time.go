@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	mapset "github.com/deckarep/golang-set"
 	"github.com/dghubble/go-twitter/twitter"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -27,8 +29,13 @@ func twitterIdToTime(id int64) time.Time {
 	return time.Unix(0, statusIdToMillis(id)*int64(time.Millisecond)).In(location)
 }
 
+func roundDown(num, places float64) float64 {
+	shift := math.Pow(10, places)
+	return math.Trunc(num*shift) / shift
+}
+
 func formatTime(t time.Time) string {
-	return t.Format("03:04:05.999")
+	return t.Format("03:04:05.000")
 }
 
 func parseTweetURL(url string) (int64, bool) {
@@ -74,7 +81,9 @@ func TimeCommand(s CommandSender, args []string) (err error) {
 			if diff > 0 {
 				sb.WriteByte('+')
 			}
-			sb.WriteString(strconv.FormatFloat(diff, 'f', 3, 64))
+			// 本来であればfmtの%+.3fは0.0009の場合0.001に四捨五入されてしまうため切り捨てしているが、
+			// 実際にはTwitterのタイムスタンプには.000までしかないため切り捨てしなくても問題ない。作者の性格に依存している。
+			sb.WriteString(fmt.Sprintf("%+.3f", roundDown(diff, 3)))
 			sb.WriteString("秒)")
 
 			s.SendMessage(sb.String())
