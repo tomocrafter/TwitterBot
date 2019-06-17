@@ -35,7 +35,7 @@ func roundDown(num, places float64) float64 {
 }
 
 func formatTime(t time.Time) string {
-	return t.Format("03:04:05.000")
+	return t.Format("15:04:05.000")
 }
 
 func parseTweetURL(url string) (int64, bool) {
