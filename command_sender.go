@@ -110,35 +110,37 @@ no-reply:制限が解除される時間 をRedisに保存しておく。
 今の時間より解除される時間のが少なかった=解除された。さらに、キーがあるため解除されてから一回目のAPIコール。
 
 ツイートできるか, このリクエストで解除されたか
-
 */
-func checkCanReply() (bool, bool) {
+func checkCanReply() (canTweet, isUnlocked bool) {
 	nextResetStr, err := redisClient.Get("no-reply").Result()
 	if err == redis.Nil {
-		return true, false
-	}
-	if err != nil {
+		nextResetStr = "0"
+		redisClient.Set("no-reply", "0", 0)
+	} else if err != nil {
 		HandleError(err)
 		return true, false // If error occurred on Redis, Try to reply.
 	}
+
 	if nextReset, err := strconv.ParseInt(nextResetStr, 10, 64); err == nil {
 		if nextReset > time.Now().Unix() {
 			return false, false
+		} else if nextReset == 0 {
+			return true, false
 		} else {
-			redisClient.Del("no-reply")
+			redisClient.Set("no-reply", "0", 0)
 			return true, true
 		}
 	} else { // If redis returned no-reply as not int.
-		redisClient.Del("no-reply")
+		redisClient.Set("no-reply", "0", 0)
 		return true, false
 	}
 }
 
 func changeName(name string, client *twitter.Client) {
 	_, _, _ = client.Accounts.UpdateProfile(&twitter.AccountProfileParams{
-		Name:       name,
+		Name:            name,
 		IncludeEntities: twitter.Bool(false),
-		SkipStatus: twitter.Bool(true),
+		SkipStatus:      twitter.Bool(true),
 	})
 }
 
@@ -148,8 +150,7 @@ func (s TimelineSender) SendMessage(message string) {
 }
 
 func sendMessage(message *Message) {
-	canReply, unlocked := checkCanReply()
-	fmt.Println(canReply, unlocked)
+	canReply, isUnlocked := checkCanReply()
 	if !canReply {
 		return
 	}
@@ -157,7 +158,7 @@ func sendMessage(message *Message) {
 		TrimUser:          twitter.Bool(true),
 		InReplyToStatusID: message.s.Tweet.ID,
 	})
-	if unlocked && e == nil {
+	if isUnlocked && e == nil {
 		changeName("tomobotter", client)
 	} else if e != nil {
 		if resp != nil {
