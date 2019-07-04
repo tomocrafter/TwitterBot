@@ -104,7 +104,10 @@ func loadClientBlackList() {
 		if strings.HasPrefix(line, "#") { // Comment
 			continue
 		}
-		blackList = append(blackList, scanner.Text())
+		blackList = append(blackList, line)
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
 	}
 }
 

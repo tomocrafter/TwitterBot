@@ -100,8 +100,8 @@ func HandleTwitter(context *gin.Context) {
 			log.Println("TL @" + tweet.User.ScreenName + ": " + tweet.Text)
 
 			// if not retweet or not reply or black listed.
-			match := r.FindStringSubmatch(tweet.Source)
-			if tweet.RetweetedStatus != nil && !isReply && len(match) != 0 && isBlackListed(match[1]) {
+			via := r.FindStringSubmatch(tweet.Source)
+			if tweet.RetweetedStatus != nil && !isReply && len(via) != 0 && isBlackListed(via[1]) {
 				return
 			}
 
