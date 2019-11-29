@@ -198,7 +198,7 @@ func main() {
 	router.GET(botConfig.Path.Webhook, HandleCRC)
 	router.POST(botConfig.Path.Webhook, AuthTwitter, HandleTwitter)
 
-	err = router.RunUnix("/tmp/bot.sock")
+	err = router.RunUnix("/var/run/twitter/bot.sock")
 	if err != nil {
 		log.Fatal("Error while running gin", err)
 	}
