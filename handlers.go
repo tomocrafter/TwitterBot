@@ -101,7 +101,7 @@ func HandleTwitter(context *gin.Context) {
 
 			// if not retweet or not reply or black listed.
 			via := r.FindStringSubmatch(tweet.Source)
-			if tweet.RetweetedStatus != nil && !isReply && len(via) != 0 && isBlackListed(via[1]) {
+			if tweet.RetweetedStatus != nil || !isReply || (len(via) != 0 && isBlackListed(via[1])) {
 				return
 			}
 

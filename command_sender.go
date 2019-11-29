@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/dghubble/go-twitter/twitter"
 	"github.com/go-redis/redis"
+	"log"
 	"strconv"
 	"time"
 )
@@ -158,17 +159,14 @@ func sendMessage(message *Message) {
 		TrimUser:          twitter.Bool(true),
 		InReplyToStatusID: message.s.Tweet.ID,
 	})
+	log.Println(e, resp)
 	if isUnlocked && e == nil {
 		changeName("tomobotter", client)
-	} else if e != nil {
-		if resp != nil {
-			if resp.StatusCode == 185 { // User is over daily status update limit
-				fmt.Println("\x1b[31m        Rate Limit Reached!        \x1b[0m")
-				changeName("tomobotter - API制限中", client)
-				redisClient.Set("no-reply", time.Now().Add(10 * time.Minute).Unix(), 0)
-			}
-		} else { // Internal Error, Or Connection error if there is no response.
-			panic(e)
+	} else if e != nil && !e.(twitter.APIError).Empty() {
+		if e.(twitter.APIError).Errors[0].Code == 185 { // User is over daily status update limit
+			fmt.Println("\x1b[31m        Rate Limit Reached!        \x1b[0m")
+			changeName("tomobotter - API制限中", client)
+			redisClient.Set("no-reply", time.Now().Add(10 * time.Minute).Unix(), 0)
 		}
 	}
 }

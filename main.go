@@ -156,6 +156,9 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Logger())
 
+	router.GET("/", func(context *gin.Context) {
+		context.String(200, user.ScreenName+" is online!")
+	})
 	router.GET("/api/downloads/:user", func(context *gin.Context) {
 		if user, ok := context.Params.Get("user"); ok {
 			var downloads []Download
@@ -195,7 +198,7 @@ func main() {
 	router.GET(botConfig.Path.Webhook, HandleCRC)
 	router.POST(botConfig.Path.Webhook, AuthTwitter, HandleTwitter)
 
-	err = router.RunUnix("/run/twitter/bot.sock")
+	err = router.RunUnix("/tmp/bot.sock")
 	if err != nil {
 		log.Fatal("Error while running gin", err)
 	}
