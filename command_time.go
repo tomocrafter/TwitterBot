@@ -12,7 +12,6 @@ import (
 )
 
 var (
-	location = time.FixedZone("Asia/Tokyo", 9*60*60)
 	pattern  = regexp.MustCompile("^https?:/*twitter\\.com/+(.+/+(status|statuses)|i/+web/+status|statuses)/+([2-9][0-9]|[1-9][0-9]{2,})(\\.json|\\.xml|\\.html|/)?(\\?.*)?$")
 )
 
@@ -119,7 +118,7 @@ func TimeCommand(s CommandSender, args []string) (err error) {
 		var sb strings.Builder
 		sb.WriteString("2010年11月以前のツイートでは正常に動作しません。\n\n")
 
-		tweets, _, err := s.Client.Statuses.Lookup(interfaceToInt64(ids.ToSlice()), &twitter.StatusLookupParams{
+		tweets, _, err := client.Statuses.Lookup(interfaceToInt64(ids.ToSlice()), &twitter.StatusLookupParams{
 			IncludeEntities: twitter.Bool(false),
 		})
 		if err != nil {
@@ -159,7 +158,7 @@ func handleQuickTime(s DirectMessageSender) bool {
 		url := s.DirectMessageEvent.Message.Data.Entities.Urls[0].ExpandedURL
 
 		if id, ok := parseTweetURL(url); ok {
-			tweet, resp, err := s.Client.Statuses.Show(id, &twitter.StatusShowParams{
+			tweet, resp, err := client.Statuses.Show(id, &twitter.StatusShowParams{
 				IncludeMyRetweet: twitter.Bool(false),
 				IncludeEntities:  twitter.Bool(false),
 			})

@@ -15,7 +15,7 @@ func DownloadCommand(s CommandSender, args []string) error {
 			return nil
 		}
 
-		status, resp, err := s.Client.Statuses.Show(replyId, &twitter.StatusShowParams{
+		status, resp, err := client.Statuses.Show(replyId, &twitter.StatusShowParams{
 			TrimUser:         twitter.Bool(true),
 			IncludeMyRetweet: twitter.Bool(false),
 			TweetMode:        "extended",

@@ -6,6 +6,7 @@ import (
 	"github.com/dghubble/go-twitter/twitter"
 	"github.com/go-redis/redis"
 	"log"
+	"net/http"
 	"strconv"
 	"time"
 )
@@ -16,8 +17,8 @@ var (
 )
 
 type Message struct {
-	s *TimelineSender
-	m string
+	m     string
+	reply int64
 }
 
 type FixedUser struct {
@@ -67,21 +68,6 @@ type FixedUser struct {
 	WithholdScope                  string                `json:"withheld_scope"`
 }
 
-type CommandSender interface {
-	SendMessage(message string)
-	GetName() string
-}
-
-type TwitterSender interface {
-	GetUserId() int64
-}
-
-// Timeline Sender
-type TimelineSender struct {
-	Client *twitter.Client
-	Tweet  *twitter.Tweet
-}
-
 func init() {
 	go func() {
 		for range updatedQueue {
@@ -94,8 +80,27 @@ func init() {
 	}()
 }
 
+type CommandSender interface {
+	SendMessage(message string)
+	GetName() string
+}
+
+type TwitterSender interface {
+	GetUserId() int64
+	GetScreenName() string
+}
+
+// Timeline Sender
+type TimelineSender struct {
+	Tweet  *twitter.Tweet
+}
+
 func (s TimelineSender) GetUserId() int64 {
 	return s.Tweet.User.ID
+}
+
+func (s TimelineSender) GetScreenName() string {
+	return s.Tweet.User.ScreenName
 }
 
 /*
@@ -145,8 +150,13 @@ func changeName(name string, client *twitter.Client) {
 	})
 }
 
+func BroadcastMessage(message string) {
+	sendMessageQueue = append(sendMessageQueue, &Message{m: message, reply: 0})
+	updatedQueue <- true
+}
+
 func (s TimelineSender) SendMessage(message string) {
-	sendMessageQueue = append(sendMessageQueue, &Message{s: &s, m: message})
+	sendMessageQueue = append(sendMessageQueue, &Message{m: "@"+s.Tweet.User.ScreenName+" "+message, reply: s.Tweet.ID})
 	updatedQueue <- true
 }
 
@@ -155,17 +165,24 @@ func sendMessage(message *Message) {
 	if !canReply {
 		return
 	}
-	_, resp, e := message.s.Client.Statuses.Update("@"+message.s.Tweet.User.ScreenName+" "+message.m, &twitter.StatusUpdateParams{
-		TrimUser:          twitter.Bool(true),
-		InReplyToStatusID: message.s.Tweet.ID,
-	})
+
+	var resp *http.Response
+	var e error
+	if message.reply != 0 {
+		_, resp, e = client.Statuses.Update(message.m, &twitter.StatusUpdateParams{
+			TrimUser:          twitter.Bool(true),
+			InReplyToStatusID: message.reply,
+		})
+	} else {
+		_, resp, e = client.Statuses.Update(message.m, nil)
+	}
 	log.Println(e, resp)
 	if isUnlocked && e == nil {
 		changeName("tomobotter", client)
 	} else if e != nil && !e.(twitter.APIError).Empty() {
 		if e.(twitter.APIError).Errors[0].Code == 185 { // User is over daily status update limit
 			fmt.Println("\x1b[31m        Rate Limit Reached!        \x1b[0m")
-			changeName("tomobotter - API制限中", client)
+			changeName("tomobotter@ツイート制限中", client)
 			redisClient.Set("no-reply", time.Now().Add(10 * time.Minute).Unix(), 0)
 		}
 	}
@@ -177,7 +194,6 @@ func (s TimelineSender) GetName() string {
 
 // DirectMessage Sender
 type DirectMessageSender struct {
-	Client             *twitter.Client
 	User               *FixedUser
 	DirectMessageEvent *twitter.DirectMessageEvent
 }
@@ -187,8 +203,12 @@ func (s DirectMessageSender) GetUserId() int64 {
 	return z
 }
 
+func (s DirectMessageSender) GetScreenName() string {
+	return s.User.ScreenName
+}
+
 func (s DirectMessageSender) SendMessage(message string) {
-	_, _, err := s.Client.DirectMessages.EventsNew(&twitter.DirectMessageEventsNewParams{
+	_, _, err := client.DirectMessages.EventsNew(&twitter.DirectMessageEventsNewParams{
 		Event: &twitter.DirectMessageEvent{
 			Type: "message_create",
 			Message: &twitter.DirectMessageEventMessage{

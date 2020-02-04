@@ -14,6 +14,10 @@ var handlers = map[string]Executor{
 	"dl":       DownloadCommand,
 
 	"roll": RollCommand,
+
+	"omikuji": OmikujiCommand,
+	"おみくじ": OmikujiCommand,
+	"おみくじ🎰": OmikujiCommand,
 }
 
 type Executor func(sender CommandSender, args []string) error

@@ -108,7 +108,6 @@ func HandleTwitter(context *gin.Context) {
 			body := builder.String()
 
 			Dispatch(TimelineSender{
-				Client: client,
 				Tweet:  tweet,
 			}, body)
 		}
@@ -129,7 +128,6 @@ func HandleTwitter(context *gin.Context) {
 			user := req.Users[e.Message.SenderID]
 
 			Dispatch(DirectMessageSender{
-				Client:             client,
 				User:               &user,
 				DirectMessageEvent: e,
 			}, text)

@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dghubble/go-twitter/twitter"
 	"github.com/dghubble/oauth1"
@@ -23,6 +24,8 @@ import (
 )
 
 var (
+	location = time.FixedZone("Asia/Tokyo", 9*60*60)
+
 	botConfig   Config
 	id          int64
 	dbMap       *gorp.DbMap
