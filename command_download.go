@@ -26,6 +26,10 @@ func DownloadCommand(s CommandSender, args []string) error {
 			}
 			return nil
 		}
+		if status.ExtendedEntities == nil {
+			s.SendMessage("動画やgifのツイートにリプライしてください。")
+			return nil
+		}
 		if len(status.ExtendedEntities.Media) != 1 {
 			s.SendMessage("動画やgifのツイートにリプライしてください。")
 			return nil
