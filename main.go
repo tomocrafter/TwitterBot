@@ -172,10 +172,16 @@ func main() {
 				HandleError(err)
 			} else {
 				n := len(downloads)
+				var res = make([]DownloadResponse, n)
 				for i := 0; i < n; i++ {
-					downloads[i].TweetIDStr = strconv.FormatInt(downloads[i].TweetID, 10)
+					res[i] = DownloadResponse{ // TODO
+						ScreenName:     downloads[i].ScreenName,
+						VideoURL:       downloads[i].VideoURL,
+						VideoThumbnail: downloads[i].VideoThumbnail,
+						TweetID:        strconv.FormatInt(downloads[i].TweetID, 10),
+					}
 				}
-				context.JSON(http.StatusOK, downloads)
+				context.JSON(http.StatusOK, res)
 			}
 		} else {
 			context.JSON(http.StatusBadRequest, []Download{})
