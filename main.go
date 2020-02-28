@@ -174,11 +174,12 @@ func main() {
 				n := len(downloads)
 				var res = make([]DownloadResponse, n)
 				for i := 0; i < n; i++ {
+					d := downloads[i]
 					res[i] = DownloadResponse{ // TODO
-						ScreenName:     downloads[i].ScreenName,
-						VideoURL:       downloads[i].VideoURL,
-						VideoThumbnail: downloads[i].VideoThumbnail,
-						TweetID:        strconv.FormatInt(downloads[i].TweetID, 10),
+						ScreenName:     d.ScreenName,
+						VideoURL:       d.VideoURL,
+						VideoThumbnail: d.VideoThumbnail,
+						TweetID:        strconv.FormatInt(d.TweetID, 10),
 					}
 				}
 				context.JSON(http.StatusOK, res)
