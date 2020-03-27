@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"github.com/dghubble/go-twitter/twitter"
 	"github.com/go-redis/redis"
-	"log"
-	"net/http"
 	"strconv"
 	"time"
 )
@@ -92,7 +90,7 @@ type TwitterSender interface {
 
 // Timeline Sender
 type TimelineSender struct {
-	Tweet  *twitter.Tweet
+	Tweet *twitter.Tweet
 }
 
 func (s TimelineSender) GetUserId() int64 {
@@ -156,7 +154,7 @@ func BroadcastMessage(message string) {
 }
 
 func (s TimelineSender) SendMessage(message string) {
-	sendMessageQueue = append(sendMessageQueue, &Message{m: "@"+s.Tweet.User.ScreenName+" "+message, reply: s.Tweet.ID})
+	sendMessageQueue = append(sendMessageQueue, &Message{m: "@" + s.Tweet.User.ScreenName + " " + message, reply: s.Tweet.ID})
 	updatedQueue <- true
 }
 
@@ -166,24 +164,22 @@ func sendMessage(message *Message) {
 		return
 	}
 
-	var resp *http.Response
 	var e error
 	if message.reply != 0 {
-		_, resp, e = client.Statuses.Update(message.m, &twitter.StatusUpdateParams{
+		_, _, e = client.Statuses.Update(message.m, &twitter.StatusUpdateParams{
 			TrimUser:          twitter.Bool(true),
 			InReplyToStatusID: message.reply,
 		})
 	} else {
-		_, resp, e = client.Statuses.Update(message.m, nil)
+		_, _, e = client.Statuses.Update(message.m, nil)
 	}
-	log.Println(e, resp)
 	if isUnlocked && e == nil {
 		changeName("tomobotter", client)
 	} else if e != nil && !e.(twitter.APIError).Empty() {
 		if e.(twitter.APIError).Errors[0].Code == 185 { // User is over daily status update limit
 			fmt.Println("\x1b[31m        Rate Limit Reached!        \x1b[0m")
 			changeName("tomobotter@ツイート制限中", client)
-			redisClient.Set("no-reply", time.Now().Add(10 * time.Minute).Unix(), 0)
+			redisClient.Set("no-reply", time.Now().Add(10*time.Minute).Unix(), 0)
 		}
 	}
 }
