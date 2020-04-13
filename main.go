@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/gin-contrib/cors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -145,9 +146,8 @@ func main() {
 
 	config := oauth1.NewConfig(botConfig.Twitter.ConsumerKey, botConfig.Twitter.ConsumerSecret)
 	token := oauth1.NewToken(botConfig.Twitter.AccessToken, botConfig.Twitter.AccessTokenSecret)
-	twitterHttpClient := config.Client(oauth1.NoContext, token)
 
-	client = twitter.NewClient(twitterHttpClient)
+	client = twitter.NewClient(config.Client(oauth1.NoContext, token))
 
 	user, _, err := client.Accounts.VerifyCredentials(nil)
 	if err != nil {
@@ -158,6 +158,11 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Logger())
+
+	// CORS
+	corsConfig := cors.DefaultConfig()
+	corsConfig.AllowOrigins = []string{"https://bot.tomocraft.net"}
+	router.Use(cors.New(corsConfig))
 
 	router.GET("/", func(context *gin.Context) {
 		context.String(200, user.ScreenName+" is online!")
