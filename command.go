@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/dghubble/go-twitter/twitter"
+	"github.com/getsentry/sentry-go"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -16,8 +18,8 @@ var handlers = map[string]Executor{
 	"roll": RollCommand,
 
 	"omikuji": OmikujiCommand,
-	"おみくじ": OmikujiCommand,
-	"おみくじ🎰": OmikujiCommand,
+	"おみくじ":    OmikujiCommand,
+	"おみくじ🎰":  OmikujiCommand,
 }
 
 type Executor func(sender CommandSender, args []string) error
@@ -37,10 +39,38 @@ func Dispatch(s CommandSender, c string) {
 	c = strings.TrimSpace(c)
 	label, args := parseCommand(c)
 
+	// TODO: DM Handle Practice
+
+	defer func() {
+		if r := recover(); r != nil {
+			err := fmt.Errorf("panic recovered: %v\n%s", r, string(debug.Stack()))
+			fmt.Printf("Panicking on executing command: %+v\n", err)
+			sentry.CaptureException(err)
+		}
+	}()
+
 	var command Executor
 	if label == "" {
-		if _, ok := s.(TimelineSender); ok {
-			command = TimeCommand
+		if tl, ok := s.(TimelineSender); ok {
+			replyId := tl.Tweet.InReplyToStatusID
+			if replyId != 0 {
+				RegisterLookupHandler(replyId, func(tweet twitter.Tweet) {
+					if _, err := GetVideoVariant(&tweet); err == nil { // If target tweet has downloadable media
+						tl.CacheReply = &tweet
+						command = DownloadCommand
+					} else {
+						command = TimeCommand
+					}
+
+					err := command(tl, args)
+					if err != nil {
+						sentry.CaptureException(err)
+					}
+					return
+				})
+			} else {
+				command = TimeCommand
+			}
 		} else {
 			fmt.Println("sender:", reflect.TypeOf(s))
 			return
@@ -48,16 +78,6 @@ func Dispatch(s CommandSender, c string) {
 	} else {
 		command = handlers[label]
 	}
-
-	// TODO: DM Handle Practice
-
-	defer func() {
-		if r := recover(); r != nil {
-			err := fmt.Errorf("panic recovered: %v\n%s", r, string(debug.Stack()))
-			fmt.Printf("Panicking on executing command: %+v\n", err)
-			HandleError(err)
-		}
-	}()
 
 	if command == nil {
 		if s, ok := s.(DirectMessageSender); ok {
@@ -68,5 +88,7 @@ func Dispatch(s CommandSender, c string) {
 		return
 	}
 	err := command(s, args)
-	HandleError(err)
+	if err != nil {
+		sentry.CaptureException(err)
+	}
 }

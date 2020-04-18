@@ -62,8 +62,6 @@ func TimeCommand(s CommandSender, args []string) (err error) {
 			return
 		}
 
-		now := time.Now()
-
 		t := twitterIdToTime(s.Tweet.InReplyToStatusID)
 		just := time.Date(t.Year(), t.Month(), t.Day(), 3, 34, 0, 0, location)
 
@@ -72,30 +70,34 @@ func TimeCommand(s CommandSender, args []string) (err error) {
 			return
 		}
 
-		if now.Hour() == 3 && now.Minute() >= 30 && now.Minute() <= 40 { // 3:30 ~ 3:40
-			sTweet, _, e := client.Statuses.Show(s.Tweet.InReplyToStatusID, nil)
-			HandleError(e)
+		proc := func() {
+			if t.Hour() == 3 && t.Minute() >= 32 && t.Minute() <= 36 { // 3:32 ~ 3:36
+				diff := float64(t.Sub(just)) / float64(time.Second)
 
-			if sTweet.Text != "334" {
-				return
+				var sb strings.Builder
+				sb.WriteString("時間:")
+				sb.WriteString(formatTime(t))
+				sb.WriteString(" (3:34ちょうどの時間から ")
+				// 本来であればfmtの%+.3fは0.0009の場合0.001に四捨五入されてしまうため切り捨てしているが、
+				// 実際にはTwitterのタイムスタンプには.000までしかないため切り捨てしなくても問題ない。作者の性格に依存している。
+				sb.WriteString(fmt.Sprintf("%+.3f", roundDown(diff, 3)))
+				sb.WriteString("秒)")
+
+				s.SendMessage(sb.String())
+			} else {
+				s.SendMessage("時間: " + formatTime(t))
 			}
 		}
 
-		if t.Hour() == 3 && t.Minute() >= 32 && t.Minute() <= 36 { // 3:32 ~ 3:36
-			diff := float64(t.Sub(just)) / float64(time.Second)
-
-			var sb strings.Builder
-			sb.WriteString("時間:")
-			sb.WriteString(formatTime(t))
-			sb.WriteString(" (3:34ちょうどの時間から ")
-			// 本来であればfmtの%+.3fは0.0009の場合0.001に四捨五入されてしまうため切り捨てしているが、
-			// 実際にはTwitterのタイムスタンプには.000までしかないため切り捨てしなくても問題ない。作者の性格に依存している。
-			sb.WriteString(fmt.Sprintf("%+.3f", roundDown(diff, 3)))
-			sb.WriteString("秒)")
-
-			s.SendMessage(sb.String())
+		if IsTweetRestricting() {
+			RegisterLookupHandler(s.Tweet.InReplyToStatusID, func(tweet twitter.Tweet) {
+				if tweet.Text != "334" {
+					return
+				}
+				proc()
+			})
 		} else {
-			s.SendMessage("時間: " + formatTime(t))
+			proc()
 		}
 
 	case DirectMessageSender:

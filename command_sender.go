@@ -90,7 +90,8 @@ type TwitterSender interface {
 
 // Timeline Sender
 type TimelineSender struct {
-	Tweet *twitter.Tweet
+	Tweet      *twitter.Tweet
+	CacheReply *twitter.Tweet
 }
 
 func (s TimelineSender) GetUserId() int64 {
@@ -116,10 +117,10 @@ no-reply:制限が解除される時間 をRedisに保存しておく。
 ツイートできるか, このリクエストで解除されたか
 */
 func checkCanReply() (canTweet, isUnlocked bool) {
-	nextResetStr, err := redisClient.Get("no-reply").Result()
+	nextResetStr, err := redisClient.Get(NoReply).Result()
 	if err == redis.Nil {
 		nextResetStr = "0"
-		redisClient.Set("no-reply", "0", 0)
+		redisClient.Set(NoReply, "0", 0)
 	} else if err != nil {
 		HandleError(err)
 		return true, false // If error occurred on Redis, Try to reply.
@@ -131,11 +132,11 @@ func checkCanReply() (canTweet, isUnlocked bool) {
 		} else if nextReset == 0 {
 			return true, false
 		} else {
-			redisClient.Set("no-reply", "0", 0)
+			redisClient.Set(NoReply, "0", 0)
 			return true, true
 		}
 	} else { // If redis returned no-reply as not int.
-		redisClient.Set("no-reply", "0", 0)
+		redisClient.Set(NoReply, "0", 0)
 		return true, false
 	}
 }

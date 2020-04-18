@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/dghubble/go-twitter/twitter"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-sql-driver/mysql"
 	"strconv"
 )
@@ -15,64 +16,44 @@ func DownloadCommand(s CommandSender, args []string) error {
 			return nil
 		}
 
-		status, resp, err := client.Statuses.Show(replyId, &twitter.StatusShowParams{
-			TrimUser:         twitter.Bool(true),
-			IncludeMyRetweet: twitter.Bool(false),
-			TweetMode:        "extended",
-		})
-		if err != nil { //Twitterサーバーからvalidationされてるはずなのでこれが発生することはないと思う。
-			if resp != nil && resp.StatusCode == 404 {
-				s.SendMessage("リプライされたツイートが見つかりませんでした。")
+		if IsTweetRestricting() {
+			return nil
+		}
+
+		proc := func(tweet twitter.Tweet) {
+			variant, err := GetVideoVariant(&tweet)
+			if err != nil {
+				s.SendMessage(err.Error())
+				return
 			}
-			return nil
-		}
-		if status.ExtendedEntities == nil {
-			s.SendMessage("動画やgifのツイートにリプライしてください。")
-			return nil
-		}
-		if len(status.ExtendedEntities.Media) != 1 {
-			s.SendMessage("動画やgifのツイートにリプライしてください。")
-			return nil
-		}
-		mediaType := status.ExtendedEntities.Media[0].Type
-		if mediaType != "video" && mediaType != "animated_gif" {
-			s.SendMessage("動画やgifのツイートにリプライしてください。")
-			return nil
-		}
 
-		//TODO: Supports company videos.
-		var bestVariant *twitter.VideoVariant
-		n := len(status.ExtendedEntities.Media[0].VideoInfo.Variants)
-		for i := 0; i < n; i++ {
-			variant := status.ExtendedEntities.Media[0].VideoInfo.Variants[i]
-			if variant.ContentType == "video/mp4" && (bestVariant == nil || bestVariant.Bitrate < variant.Bitrate) {
-				bestVariant = &variant
-			}
-		}
-
-		if bestVariant == nil {
-			s.SendMessage("動画やgifのツイートにリプライしてください。現在、企業向けのツイートメイカーにて作成されたツイートの動画をダウンロードすることはできません。")
-			return nil
-		}
-
-		e := dbMap.Insert(&Download{
-			ScreenName:     s.Tweet.User.ScreenName,
-			VideoURL:       bestVariant.URL,
-			VideoThumbnail: status.ExtendedEntities.Media[0].MediaURLHttps,
-			TweetID:        replyId,
-		})
-		if e != nil {
-			if mysqlErr, ok := e.(*mysql.MySQLError); ok {
-				// https://dev.mysql.com/doc/refman/8.0/en/server-error-reference.html
-				if mysqlErr.Number == 1062 { // ER_DUP_ENTRY
-					s.SendMessage("この動画/gifはすでに保存済みです。下記URLからダウンロードしてください。\nhttps://bot.tomocraft.net/downloads/" + s.Tweet.User.ScreenName)
-					return nil
+			e := dbMap.Insert(&Download{
+				ScreenName:     s.Tweet.User.ScreenName,
+				VideoURL:       variant.URL,
+				VideoThumbnail: tweet.ExtendedEntities.Media[0].MediaURLHttps,
+				TweetID:        replyId,
+			})
+			if e != nil {
+				if mysqlErr, ok := e.(*mysql.MySQLError); ok {
+					// https://dev.mysql.com/doc/refman/8.0/en/server-error-reference.html
+					if mysqlErr.Number == 1062 { // ER_DUP_ENTRY
+						s.SendMessage("この動画/gifはすでに保存済みです。下記URLからダウンロードしてください。\nhttps://bot.tomocraft.net/downloads/" + s.Tweet.User.ScreenName)
+						return
+					}
 				}
+				s.SendMessage("@tomocrafter データベース上にてエラーが発生しました。開発者ができる限り早くサポート致します。")
+				sentry.CaptureException(e)
+			} else {
+				s.SendMessage("ダウンロードの準備が整いました。下記URLからダウンロードしてください。\nhttps://bot.tomocraft.net/downloads/" + s.Tweet.User.ScreenName)
 			}
-			s.SendMessage("@tomocrafter データベース上にてエラーが発生しました。開発者ができる限り早くサポート致します。")
-			return e
+		}
+
+		if s.CacheReply != nil {
+			proc(*s.CacheReply)
 		} else {
-			s.SendMessage("ダウンロードの準備が整いました。下記URLからダウンロードしてください。\nhttps://bot.tomocraft.net/downloads/" + s.Tweet.User.ScreenName)
+			RegisterLookupHandler(replyId, func(tweet twitter.Tweet) {
+				proc(tweet)
+			})
 		}
 
 	case DirectMessageSender:
