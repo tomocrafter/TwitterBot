@@ -2,17 +2,19 @@ package main
 
 import (
 	"fmt"
-	mapset "github.com/deckarep/golang-set"
-	"github.com/dghubble/go-twitter/twitter"
 	"math"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	mapset "github.com/deckarep/golang-set"
+	"github.com/getsentry/sentry-go"
+	"github.com/tomocrafter/go-twitter/twitter"
 )
 
 var (
-	pattern  = regexp.MustCompile("^https?:/*twitter\\.com/+(.+/+(status|statuses)|i/+web/+status|statuses)/+([2-9][0-9]|[1-9][0-9]{2,})(\\.json|\\.xml|\\.html|/)?(\\?.*)?$")
+	pattern = regexp.MustCompile("^https?:/*twitter\\.com/+(.+/+(status|statuses)|i/+web/+status|statuses)/+([2-9][0-9]|[1-9][0-9]{2,})(\\.json|\\.xml|\\.html|/)?(\\?.*)?$")
 )
 
 const (
@@ -37,7 +39,7 @@ func formatTime(t time.Time) string {
 	return t.Format("15:04:05.000")
 }
 
-func parseTweetURL(url string) (int64, bool) {
+func getTweetIDFromURL(url string) (int64, bool) {
 	match := pattern.FindStringSubmatch(url)
 	if len(match) > 3 {
 		id, _ := strconv.ParseInt(match[3], 10, 64)
@@ -54,7 +56,7 @@ func interfaceToInt64(i []interface{}) []int64 {
 	return f
 }
 
-func TimeCommand(s CommandSender, args []string) (err error) {
+func timeCommand(s CommandSender, args []string) {
 	switch s := s.(type) {
 	case TimelineSender:
 		if s.Tweet.InReplyToStatusID == 0 { // Error
@@ -70,6 +72,13 @@ func TimeCommand(s CommandSender, args []string) (err error) {
 			return
 		}
 
+		if IsTimeRestricting() {
+			tweet := queueProcessor.LookupTweetBlocking(s.Tweet.InReplyToStatusID)
+			if tweet.Text != "334" {
+				return
+			}
+		}
+
 		if t.Hour() == 3 && t.Minute() >= 32 && t.Minute() <= 36 { // 3:32 ~ 3:36
 			diff := float64(t.Sub(just)) / float64(time.Second)
 
@@ -83,10 +92,9 @@ func TimeCommand(s CommandSender, args []string) (err error) {
 			sb.WriteString("秒)")
 
 			s.SendMessage(sb.String())
-			return
+		} else {
+			s.SendMessage("時間: " + formatTime(t))
 		}
-
-		s.SendMessage("時間: " + formatTime(t))
 
 	case DirectMessageSender:
 		ids := mapset.NewThreadUnsafeSet()
@@ -101,7 +109,7 @@ func TimeCommand(s CommandSender, args []string) (err error) {
 			}
 
 			if url, ok := urls[v]; ok {
-				if id, ok := parseTweetURL(url); ok {
+				if id, ok := getTweetIDFromURL(url); ok {
 					ids.Add(id)
 				} else {
 					s.SendMessage(InvalidArgumentError)
@@ -122,7 +130,8 @@ func TimeCommand(s CommandSender, args []string) (err error) {
 			IncludeEntities: twitter.Bool(false),
 		})
 		if err != nil {
-			return err
+			sentry.CaptureException(err)
+			return
 		}
 		for _, tweet := range tweets {
 			ids.Remove(tweet.ID)
@@ -151,13 +160,13 @@ func TimeCommand(s CommandSender, args []string) (err error) {
 	return
 }
 
-func handleQuickTime(s DirectMessageSender) bool {
+func handleQuickTime(s DirectMessageSender) {
 	if len(s.DirectMessageEvent.Message.Data.Entities.Urls) == 1 &&
 		s.DirectMessageEvent.Message.Data.Text == s.DirectMessageEvent.Message.Data.Entities.Urls[0].URL {
 
 		url := s.DirectMessageEvent.Message.Data.Entities.Urls[0].ExpandedURL
 
-		if id, ok := parseTweetURL(url); ok {
+		if id, ok := getTweetIDFromURL(url); ok {
 			tweet, resp, err := client.Statuses.Show(id, &twitter.StatusShowParams{
 				IncludeMyRetweet: twitter.Bool(false),
 				IncludeEntities:  twitter.Bool(false),
@@ -169,9 +178,8 @@ func handleQuickTime(s DirectMessageSender) bool {
 					} else if resp.StatusCode == 403 {
 						s.SendMessage("このツイートは非公開アカウントのツイートか、取得できないツイートです。")
 					}
-					return true
 				} else {
-					HandleError(err)
+					sentry.CaptureException(err)
 				}
 			} else {
 				var sb strings.Builder
@@ -184,10 +192,6 @@ func handleQuickTime(s DirectMessageSender) bool {
 
 				s.SendMessage(sb.String())
 			}
-			return true
-		} else {
-			return false
 		}
 	}
-	return false
 }

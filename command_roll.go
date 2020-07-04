@@ -10,7 +10,7 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func RollCommand(s CommandSender, args []string) error {
+func RollCommand(s CommandSender, args []string) {
 	if len(args) == 0 {
 		s.SendMessage(s.GetName() + " rolls " + strconv.Itoa(rand.Intn(100)+1) + " points(s)")
 	} else if len(args) > 1 {
@@ -24,5 +24,4 @@ func RollCommand(s CommandSender, args []string) error {
 			s.SendMessage(s.GetName() + " rolls " + strconv.FormatInt(rand.Int63n(max)+1, 10) + " point(s)")
 		}
 	}
-	return nil
 }
