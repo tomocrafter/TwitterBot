@@ -7,44 +7,46 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getsentry/sentry-go"
-	"github.com/gin-contrib/cors"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/dghubble/go-twitter/twitter"
+	"github.com/getsentry/sentry-go"
+	"github.com/gin-contrib/cors"
+
 	"github.com/dghubble/oauth1"
 	"github.com/gin-gonic/gin"
 	"github.com/go-gorp/gorp"
 	"github.com/go-redis/redis"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/tomocrafter/go-twitter/twitter"
 )
 
 var (
 	location = time.FixedZone("Asia/Tokyo", 9*60*60)
+	r        = regexp.MustCompile(`<a href=".*?" rel="nofollow">(.*?)</a>`)
 
-	botConfig   Config
-	id          int64
-	dbMap       *gorp.DbMap
-	client      *twitter.Client
-	redisClient *redis.Client
-	blackList   []string
-	lookupQueue = make(map[int64][]func(tweet twitter.Tweet))
+	botConfig      Config
+	id             int64
+	dbMap          *gorp.DbMap
+	client         *twitter.Client
+	redisClient    *redis.Client
+	blackList      []string
+	queueProcessor *lookupQueue
+
+	// Error
+	errNotVideoTweet = errors.New("動画やgifのツイートにリプライしてください。")
+	errNoMediaFound  = errors.New("動画やgifのツイートにリプライしてください。また、現在、企業向けのツイートメイカーにて作成されたツイートの動画をダウンロードすることはできません。")
 )
 
 const (
-	// Error
-	NotVideoTweet = "動画やgifのツイートにリプライしてください。"
-	NoMediaFound  = "動画やgifのツイートにリプライしてください。また、現在、企業向けのツイートメイカーにて作成されたツイートの動画をダウンロードすることはできません。"
-
 	// Redis Key
-	NoReply            = "no-reply"
+	NoReply            = "no-reply-id"
 	ShowRateLimitReset = "show-rate-limit-reset"
 )
 
@@ -58,13 +60,6 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-}
-
-func readRequestBody(reader *io.ReadCloser) string {
-	buf, _ := ioutil.ReadAll(*reader)
-	s := string(buf)
-	*reader = ioutil.NopCloser(bytes.NewBuffer(buf))
-	return s
 }
 
 func escape(target string) string {
@@ -108,25 +103,23 @@ func isBlackListed(via string) bool {
 }
 
 func main() {
-	err := sentry.Init(sentry.ClientOptions{
+	var err error
+	err = sentry.Init(sentry.ClientOptions{
 		Dsn: "https://ab2e5e281e6543d7a98855b06da4e0da@o376900.ingest.sentry.io/5198552",
 	})
 	if err != nil {
-		log.Fatalf("sentry.Init: %s", err)
+		log.Fatal("sentry.Init: ", err)
 	}
 
 	defer func() {
-		sentry.CaptureMessage("shutting down bot...")
 		sentry.Flush(2 * time.Second)
 	}()
 
-	sentry.CaptureMessage("starting bot...")
-
 	gin.SetMode(gin.ReleaseMode)
 
-	db, err := sql.Open("mysql", botConfig.MySQL.User+":"+botConfig.MySQL.Password+"@unix(/var/lib/mysql/mysql.sock)/"+botConfig.MySQL.DB+"?parseTime=true")
+	db, err := sql.Open("mysql", botConfig.MySQL.User+":"+botConfig.MySQL.Password+"@"+botConfig.MySQL.Addr+"/"+botConfig.MySQL.DB+"?parseTime=true")
 	if err != nil {
-		log.Panic("Error while connecting to MySQL", err)
+		log.Fatal("Error while connecting to MySQL", err)
 	}
 	dbMap = &gorp.DbMap{Db: db, Dialect: gorp.MySQLDialect{Engine: "InnoDB", Encoding: "UTF8"}}
 	dbMap.AddTableWithName(Download{}, "download")
@@ -136,9 +129,9 @@ func main() {
 
 	redisClient = redis.NewClient(&redis.Options{
 		Network:  "unix",
-		Addr:     "/tmp/redis.sock",
-		Password: botConfig.Redis.Password,
 		DB:       botConfig.Redis.DB,
+		Addr:     botConfig.MySQL.Addr,
+		Password: botConfig.Redis.Password,
 	})
 
 	config := oauth1.NewConfig(botConfig.Twitter.ConsumerKey, botConfig.Twitter.ConsumerSecret)
@@ -148,18 +141,23 @@ func main() {
 
 	user, _, err := client.Accounts.VerifyCredentials(nil)
 	if err != nil {
-		log.Panic("Error white fetching user", err)
+		log.Fatal("Error white fetching user", err)
 	}
 	log.Println("Logged in to @" + user.ScreenName)
 	id = user.ID
+	user = nil
 
 	router := gin.New()
 	router.Use(gin.Logger())
 
 	// CORS
-	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowOrigins = []string{"https://bot.tomocraft.net"}
-	router.Use(cors.New(corsConfig))
+	router.Use(cors.New(cors.Config{
+		AllowMethods:     []string{"GET", "POST"},
+		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type"},
+		AllowOrigins:     []string{"https://bot.tomocraft.net"},
+		AllowCredentials: false,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	router.GET("/", func(context *gin.Context) {
 		context.String(200, user.ScreenName+" is online!")
@@ -193,7 +191,7 @@ func main() {
 	router.GET("/api/suggests", func(context *gin.Context) {
 		if query, ok := context.GetQuery("query"); ok {
 			var screenNames []string
-			_, err := dbMap.Select(&screenNames, "SELECT DISTINCT screen_name FROM download WHERE screen_name LIKE ?", "%"+escape(query)+"%")
+			_, err := dbMap.Select(&screenNames, "SELECT DISTINCT screen_name FROM download WHERE screen_name LIKE ? LIMIT 10", "%"+escape(query)+"%")
 			if err != nil {
 				context.JSON(http.StatusInternalServerError, []string{})
 				fmt.Printf("Error on requesting to MySQL: %+v", err)
@@ -206,166 +204,74 @@ func main() {
 		}
 	})
 
-	// Routing to /webhook
-	router.GET(botConfig.Path.Webhook, HandleCRC)
-	router.POST(botConfig.Path.Webhook, AuthTwitter, HandleTwitter)
+	// Routing to GET /webhook for crc test!
+	router.GET(botConfig.Path.Webhook, twitter.CreateCRCHandler(botConfig.Twitter.ConsumerSecret))
 
-	go func() {
-		for {
-			resetStr, err := redisClient.Get(ShowRateLimitReset).Result()
-			if err != nil {
-				if err != redis.Nil {
-					sentry.CaptureException(err)
-				}
-			} else {
-				if reset, err := strconv.ParseInt(resetStr, 10, 64); err == nil {
-					if reset > time.Now().Unix() {
-						time.Sleep(5 * time.Second)
-						continue
-					}
-				} else {
-					sentry.CaptureMessage(fmt.Sprintf("Not int64 value (%s) passed by redis with key %s", resetStr, ShowRateLimitReset))
-				}
-			}
+	// Routing to POST /webhook for handling webhook payload!
+	payloads := make(chan interface{})
 
-			go func() {
-				if len(lookupQueue) == 0 {
-					return
-				}
+	handler, err := twitter.CreateWebhookHandler(payloads)
+	if err != nil {
+		sentry.CaptureException(err)
+		log.Fatal("Error while creating webhook handler", err)
+	}
+	// Make a debug handler to prints body of webhook.
+	debug := func(context *gin.Context) {
+		reader := &context.Request.Body
+		buf, _ := ioutil.ReadAll(*reader)
+		s := string(buf)
+		*reader = ioutil.NopCloser(bytes.NewBuffer(buf))
+		log.Printf("webhook debug:\n%s\n", s)
+	}
+	router.POST(botConfig.Path.Webhook, twitter.CreateTwitterAuthHandler(botConfig.Twitter.ConsumerSecret), debug, handler)
 
-				ids := make([]int64, 0, len(lookupQueue))
-				for id := range lookupQueue {
-					ids = append(ids, id)
-				}
-				log.Printf("Looking up tweets: %v", ids)
+	// Start listening payloads from webhook
+	go listen(payloads)
 
-				fallback := false
-				tweets, _, err := client.Statuses.Lookup(ids, nil)
-				if err != nil {
-					if err.(twitter.APIError).Errors[0].Code == 88 { // Rate limit exceeded
-						sentry.CaptureMessage("API /statuses/lookup exceeded rate limit!")
-						fallback = true
-					} else {
-						sentry.CaptureException(err)
-						return
-					}
-				}
+	// Initialize queueProcessor
+	queueProcessor = NewLookupQueue()
+	go queueProcessor.StartTicker()
 
-				if fallback {
-					for id, cbs := range lookupQueue {
-						tweet, resp, err := client.Statuses.Show(id, &twitter.StatusShowParams{
-							TrimUser:         twitter.Bool(true),
-							IncludeMyRetweet: twitter.Bool(false),
-							TweetMode:        "extended",
-						})
-
-						if err != nil {
-							if resp != nil {
-								if err.(twitter.APIError).Errors[0].Code == 88 { // Rate limit exceeded
-									sentry.CaptureMessage("API /statuses/show/:id exceeded rate limit!")
-									redisClient.Set("show-rate-limit-reset", resp.Header.Get("x-rate-limit-reset"), 0)
-									break
-								}
-								if resp.StatusCode == 404 { // Tweet already deleted.
-									continue
-								}
-							}
-							continue
-						}
-
-						for _, cb := range cbs {
-							go cb(*tweet)
-						}
-					}
-				} else {
-					// Ignore tweet that already deleted.
-					for _, tweet := range tweets {
-						cbs, ok := lookupQueue[tweet.ID]
-						if !ok {
-							continue
-						}
-						for _, cb := range cbs {
-							go cb(tweet)
-						}
-					}
-				}
-
-				lookupQueue = make(map[int64][]func(tweet twitter.Tweet))
-			}()
-			time.Sleep(5 * time.Second)
-		}
-	}()
-
+	// Now start serving!
 	err = router.RunUnix("/var/run/twitter/bot.sock")
 	if err != nil {
-		log.Fatal("Error while running gin", err)
+		err = fmt.Errorf("an error occurred while running gin: %s", err)
+		sentry.CaptureException(err)
+		log.Fatal(err)
 	}
 }
 
-func RegisterLookupHandler(id int64, handler func(tweet twitter.Tweet)) {
-	lookupQueue[id] = append(lookupQueue[id], handler)
-}
-
-func IsTweetRestricting() bool {
+// IsTimeRestricting は3:30から3:40の間だけtrueを返し、それ以外の時間の場合はfalseを返します
+func IsTimeRestricting() bool {
 	now := time.Now()
 	return now.Hour() == 3 && now.Minute() >= 30 && now.Minute() <= 40 // 3:30 ~ 3:40
 }
 
 func GetVideoVariant(status *twitter.Tweet) (*twitter.VideoVariant, error) {
 	if status.ExtendedEntities == nil {
-		return nil, errors.New(NotVideoTweet)
+		return nil, errNotVideoTweet
 	}
 	if len(status.ExtendedEntities.Media) != 1 {
-		return nil, errors.New(NotVideoTweet)
+		return nil, errNotVideoTweet
 	}
-	mediaType := status.ExtendedEntities.Media[0].Type
-	if mediaType != "video" && mediaType != "animated_gif" {
-		return nil, errors.New(NotVideoTweet)
+	media := status.ExtendedEntities.Media[0]
+	if media.Type != "video" && media.Type != "animated_gif" {
+		return nil, errNotVideoTweet
 	}
 
 	//TODO: Supports company videos.
 	var bestVariant *twitter.VideoVariant
-	n := len(status.ExtendedEntities.Media[0].VideoInfo.Variants)
+	n := len(media.VideoInfo.Variants)
 	for i := 0; i < n; i++ {
-		variant := status.ExtendedEntities.Media[0].VideoInfo.Variants[i]
+		variant := media.VideoInfo.Variants[i]
 		if variant.ContentType == "video/mp4" && (bestVariant == nil || bestVariant.Bitrate < variant.Bitrate) {
 			bestVariant = &variant
 		}
 	}
 
 	if bestVariant == nil {
-		return nil, errors.New(NoMediaFound)
+		return nil, errNoMediaFound
 	}
 
 	return bestVariant, nil
-}
-
-func HandleError(err error) {
-	if err != nil {
-		go SendMessageToTelegram(err.Error())
-	}
-}
-
-func SendMessageToTelegram(message string) {
-	req, _ := http.NewRequest("GET", fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botConfig.Telegram.Key), nil)
-
-	query := req.URL.Query()
-	query.Set("chat_id", botConfig.Telegram.ChatId)
-	query.Set("text", message)
-	req.URL.RawQuery = query.Encode()
-
-	resp, err := http.DefaultClient.Do(req)
-	defer func() {
-		err = resp.Body.Close()
-		if err != nil {
-			fmt.Printf("Error on closing response body: %+v\n", err)
-		}
-	}()
-	body, readErr := ioutil.ReadAll(resp.Body)
-	if readErr != nil {
-		fmt.Printf("Error on reading response body: %+v\n", readErr)
-	}
-	if err != nil {
-		fmt.Printf("Error on sending to telegram: %+v%s\n", err, body)
-	}
 }

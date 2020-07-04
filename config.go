@@ -13,12 +13,14 @@ type Config struct {
 	} `json:"telegram"`
 	MySQL struct {
 		DB       string `json:"db"`
+		Addr     string `json:"addr"`
 		User     string `json:"user"`
 		Password string `json:"password"`
 	} `json:"mysql"`
 	Redis struct {
-		Password string `json:"password"`
 		DB       int    `json:"db"`
+		Addr     string `json:"addr"`
+		Password string `json:"password"`
 	} `json:"redis"`
 	Path struct {
 		Webhook string `json:"webhook"`

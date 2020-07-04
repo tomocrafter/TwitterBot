@@ -2,31 +2,40 @@ package main
 
 import (
 	"fmt"
-	"github.com/dghubble/go-twitter/twitter"
-	"github.com/getsentry/sentry-go"
 	"reflect"
 	"runtime/debug"
 	"strings"
+	"unicode"
+
+	"github.com/getsentry/sentry-go"
 )
 
 var handlers = map[string]Executor{
-	"time": TimeCommand,
+	"time": timeCommand,
 
-	"download": DownloadCommand,
-	"dl":       DownloadCommand,
+	"download": downloadCommand,
+	"dl":       downloadCommand,
 
 	"roll": RollCommand,
 
 	"omikuji": OmikujiCommand,
 	"おみくじ":    OmikujiCommand,
-	"おみくじ🎰":  OmikujiCommand,
+	"おみくじ🎰":   OmikujiCommand,
 }
 
-type Executor func(sender CommandSender, args []string) error
+type Executor func(sender CommandSender, args []string)
 
-//
+func isBlank(str string) bool {
+	for _, char := range str {
+		if !unicode.IsSpace(char) {
+			return false
+		}
+	}
+	return true
+}
+
 func parseCommand(c string) (string, []string) {
-	if IsBlank(c) {
+	if isBlank(c) {
 		return "", []string{}
 	}
 
@@ -35,6 +44,9 @@ func parseCommand(c string) (string, []string) {
 	return strings.ToLower(split[0]), split[1:]
 }
 
+// Dispatch executes command that passed by webhook listener,
+// Blocking will occurs if tweet need to be looked up.
+// and then execute command in blocking.
 func Dispatch(s CommandSender, c string) {
 	c = strings.TrimSpace(c)
 	label, args := parseCommand(c)
@@ -50,45 +62,34 @@ func Dispatch(s CommandSender, c string) {
 	}()
 
 	var command Executor
+
 	if label == "" {
 		if tl, ok := s.(TimelineSender); ok {
-			replyId := tl.Tweet.InReplyToStatusID
-			if replyId != 0 {
-				RegisterLookupHandler(replyId, func(tweet twitter.Tweet) {
-					if _, err := GetVideoVariant(&tweet); err == nil { // If target tweet has downloadable media
-						tl.CacheReply = &tweet
-						command = DownloadCommand
-					} else {
-						command = TimeCommand
-					}
-
-					err := command(tl, args)
-					if err != nil {
-						sentry.CaptureException(err)
-					}
-					return
-				})
+			replyID := tl.Tweet.InReplyToStatusID
+			if replyID != 0 {
+				tweet := queueProcessor.LookupTweetBlocking(replyID)
+				if _, err := GetVideoVariant(&tweet); err == nil { // If target tweet has downloadable media
+					tl.ReplyCache = &tweet
+					command = downloadCommand
+				} else {
+					command = timeCommand
+				}
 			} else {
-				command = TimeCommand
+				command = timeCommand
 			}
 		} else {
-			fmt.Println("sender:", reflect.TypeOf(s))
-			return
+			fmt.Println("non timeline sender sent empty command: ", reflect.TypeOf(s))
 		}
 	} else {
 		command = handlers[label]
 	}
 
-	if command == nil {
-		if s, ok := s.(DirectMessageSender); ok {
-			if handleQuickTime(s) {
-				return
-			}
+	if command == nil { // If unknown command has issued
+		if s, ok := s.(DirectMessageSender); ok { // and If sender is from direct message.
+			handleQuickTime(s)
 		}
 		return
 	}
-	err := command(s, args)
-	if err != nil {
-		sentry.CaptureException(err)
-	}
+
+	command(s, args)
 }

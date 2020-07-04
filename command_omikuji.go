@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/dghubble/go-twitter/twitter"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-redis/redis"
 	"github.com/kyokomi/lottery"
+	"github.com/tomocrafter/go-twitter/twitter"
 	"log"
 	"math/rand"
 	"strconv"
@@ -21,18 +22,18 @@ func (d Item) Prob() int {
 }
 
 var (
-	mt = new(sync.Mutex)
-	lot = lottery.New(rand.New(rand.NewSource(time.Now().Unix())))
+	mt    = new(sync.Mutex)
+	lot   = lottery.New(rand.New(rand.NewSource(time.Now().Unix())))
 	items = []lottery.Interface{
-		Item{ItemName: "大吉", DropProb: 5},       // 0.05%
-		Item{ItemName: "吉", DropProb: 4500},      // 45%
-		Item{ItemName: "中吉", DropProb: 3600},    // 36%
-		Item{ItemName: "小吉", DropProb: 1595},    // 15.95%
-		Item{ItemName: "凶", DropProb: 300},       // 3%
+		Item{ItemName: "大吉", DropProb: 5},    // 0.05%
+		Item{ItemName: "吉", DropProb: 4500},  // 45%
+		Item{ItemName: "中吉", DropProb: 3600}, // 36%
+		Item{ItemName: "小吉", DropProb: 1595}, // 15.95%
+		Item{ItemName: "凶", DropProb: 300},   // 3%
 	}
 )
 
-func OmikujiCommand(s CommandSender, _ []string) error {
+func OmikujiCommand(s CommandSender, _ []string) {
 	mt.Lock()
 	defer mt.Unlock()
 
@@ -45,15 +46,15 @@ func OmikujiCommand(s CommandSender, _ []string) error {
 		id = s.Tweet.User.ID
 	case DirectMessageSender:
 		screenName = s.User.ScreenName
-		id, _ = s.User.ID.Int64()
+		id = s.User.ID
 	default:
-		return nil
+		return
 	}
 
 	// Check If today is in 1/1 - 1/7
 	now := time.Now()
 	if now.Month() != 1 || now.Day() > 7 {
-		return nil
+		return
 	}
 
 	key := "lottery:" + strconv.FormatInt(id, 10)
@@ -79,9 +80,11 @@ func OmikujiCommand(s CommandSender, _ []string) error {
 						},
 					},
 				})
-				HandleError(err)
+				if err != nil {
+					sentry.CaptureException(err)
+				}
 			}()
-			BroadcastMessage(s.GetName()+" (@"+screenName+") さんが確率 0.05% の大吉を当てました！")
+			BroadcastMessage(s.GetName() + " (@" + screenName + ") さんが確率 0.05% の大吉を当てました！")
 		} else {
 			go func() {
 				_, _, err := client.DirectMessages.EventsNew(&twitter.DirectMessageEventsNewParams{
@@ -97,16 +100,17 @@ func OmikujiCommand(s CommandSender, _ []string) error {
 						},
 					},
 				})
-				HandleError(err)
+				if err != nil {
+					sentry.CaptureException(err)
+				}
 			}()
 		}
 
 		tomorrow := now.AddDate(0, 0, 1)
 		ch := time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), 0, 0, 0, 0, location)
 
-		redisClient.SetNX(key, 0, ch.Sub(now))
+		redisClient.SetNX(key, "", ch.Sub(now))
 	} else if err != nil {
-		HandleError(err)
+		sentry.CaptureException(err)
 	}
-	return nil
 }
