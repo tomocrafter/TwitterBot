@@ -105,7 +105,7 @@ func isBlackListed(via string) bool {
 func main() {
 	var err error
 	err = sentry.Init(sentry.ClientOptions{
-		Dsn: "https://ab2e5e281e6543d7a98855b06da4e0da@o376900.ingest.sentry.io/5198552",
+		Dsn: botConfig.Sentry.Dsn,
 	})
 	if err != nil {
 		log.Fatal("sentry.Init: ", err)

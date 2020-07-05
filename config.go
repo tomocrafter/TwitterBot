@@ -25,6 +25,9 @@ type Config struct {
 	Path struct {
 		Webhook string `json:"webhook"`
 	} `json:"path"`
+	Sentry struct {
+		Dsn string `json:"dsn"`
+	} `json:"sentry"`
 	Osu struct {
 		Key string `json:"key"`
 	} `json:"osu"`
