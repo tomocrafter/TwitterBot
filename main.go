@@ -51,7 +51,7 @@ const (
 )
 
 func init() {
-	go loadClientBlackList()
+	go loadDeniedClientList()
 	file, err := ioutil.ReadFile("config.json")
 	if err != nil {
 		panic(err)
@@ -73,8 +73,8 @@ func escape(target string) string {
 	return sb.String()
 }
 
-func loadClientBlackList() {
-	fp, err := os.OpenFile("client_black_list.txt", os.O_RDONLY|os.O_CREATE, 0660)
+func loadDeniedClientList() {
+	fp, err := os.OpenFile("denied_clients.txt", os.O_RDONLY|os.O_CREATE, 0660)
 	if err != nil {
 		log.Fatal(err)
 	}
