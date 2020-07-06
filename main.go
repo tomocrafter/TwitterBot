@@ -36,7 +36,7 @@ var (
 	dbMap          *gorp.DbMap
 	client         *twitter.Client
 	redisClient    *redis.Client
-	blackList      []string
+	deniedClients  []string
 	queueProcessor *lookupQueue
 
 	// Error
@@ -86,15 +86,15 @@ func loadDeniedClientList() {
 		if strings.HasPrefix(line, "#") { // Comment
 			continue
 		}
-		blackList = append(blackList, line)
+		deniedClients = append(deniedClients, line)
 	}
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func isBlackListed(via string) bool {
-	for _, v := range blackList {
+func isDeniedClient(via string) bool {
+	for _, v := range deniedClients {
 		if v == via {
 			return true
 		}

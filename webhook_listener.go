@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/tomocrafter/go-twitter/twitter"
 	"log"
 	"strings"
+
+	"github.com/tomocrafter/go-twitter/twitter"
 )
 
 func listen(payloads chan interface{}) {
@@ -36,7 +37,7 @@ func listen(payloads chan interface{}) {
 
 			// if not retweet or not replyId or black listed.
 			via := r.FindStringSubmatch(t.Source)
-			if t.RetweetedStatus != nil || !isReply || (len(via) != 0 && isBlackListed(via[1])) {
+			if t.RetweetedStatus != nil || !isReply || (len(via) != 0 && isDeniedClient(via[1])) {
 				return
 			}
 
