@@ -7,10 +7,6 @@ type Config struct {
 		AccessToken       string `json:"access_token"`
 		AccessTokenSecret string `json:"access_token_secret"`
 	} `json:"twitter"`
-	Telegram struct {
-		Key    string `json:"key"`
-		ChatId string `json:"chat_id"`
-	} `json:"telegram"`
 	MySQL struct {
 		DB       string `json:"db"`
 		Addr     string `json:"addr"`
@@ -28,10 +24,4 @@ type Config struct {
 	Sentry struct {
 		Dsn string `json:"dsn"`
 	} `json:"sentry"`
-	Osu struct {
-		Key string `json:"key"`
-	} `json:"osu"`
-	COC struct {
-		Key string `json:"key"`
-	} `json:"coc"`
 }
