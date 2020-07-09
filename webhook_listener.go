@@ -2,12 +2,14 @@ package main
 
 import (
 	"log"
+	"regexp"
 	"strings"
 
 	"github.com/tomocrafter/go-twitter/twitter"
 )
 
 func listen(payloads chan interface{}) {
+	r := regexp.MustCompile(`<a href=".*?" rel="nofollow">(.*?)</a>`)
 	for event := range payloads {
 		switch t := event.(type) {
 		case twitter.TweetCreateEvent:

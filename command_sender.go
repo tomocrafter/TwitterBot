@@ -21,45 +21,43 @@ type Message struct {
 
 // メッセージは、キューイングする必要があります。
 // 1リクエストごとにRedisとコミュニケーションしツイートが制限されているか確かめる必要があるからです。
-func init() {
-	go func() {
-		changeName := func(name string, client *twitter.Client) {
-			_, _, _ = client.Accounts.UpdateProfile(&twitter.AccountProfileParams{
-				Name:            name,
-				IncludeEntities: twitter.Bool(false),
-				SkipStatus:      twitter.Bool(true),
-			})
+func MessageSendTicker() {
+	changeName := func(name string, client *twitter.Client) {
+		_, _, _ = client.Accounts.UpdateProfile(&twitter.AccountProfileParams{
+			Name:            name,
+			IncludeEntities: twitter.Bool(false),
+			SkipStatus:      twitter.Bool(true),
+		})
+	}
+
+	for message := range sendMessageQueue {
+		canReply, isUnlocked := checkCanReply()
+		if !canReply {
+			return
 		}
 
-		for message := range sendMessageQueue {
-			canReply, isUnlocked := checkCanReply()
-			if !canReply {
-				return
-			}
+		params := &twitter.StatusUpdateParams{}
+		if message.replyID != nil {
+			params.TrimUser = twitter.Bool(true)
+			params.InReplyToStatusID = *message.replyID
+		}
 
-			params := &twitter.StatusUpdateParams{}
-			if message.replyID != nil {
-				params.TrimUser = twitter.Bool(true)
-				params.InReplyToStatusID = *message.replyID
-			}
+		_, _, e := client.Statuses.Update(message.m, params)
 
-			_, _, e := client.Statuses.Update(message.m, params)
-
-			if isUnlocked && e == nil {
-				changeName("tomobotter", client)
-			} else if e != nil {
-				if e.(twitter.APIError).Errors[0].Code == 185 { // User is over daily status update limit
-					fmt.Println("\x1b[31m        Rate Limit Reached!        \x1b[0m")
-					changeName("tomobotter@ツイート制限中", client)
-					redisClient.Set(NoReply, time.Now().Add(10*time.Minute).Unix(), 0)
-				}
+		if isUnlocked && e == nil {
+			changeName("tomobotter", client)
+		} else if e != nil {
+			if e.(twitter.APIError).Errors[0].Code == 185 { // User is over daily status update limit
+				fmt.Println("\x1b[31m        Rate Limit Reached!        \x1b[0m")
+				changeName("tomobotter@ツイート制限中", client)
+				redisClient.Set(NoReply, time.Now().Add(10*time.Minute).Unix(), 0)
 			}
 		}
-	}()
+	}
 }
 
 /*
-checkCanReply はツイートができるか、そしてこのリクエストで制限が解除されたかをRedisに問い合わせて返します。
+checkCanReply はツイートができるか、そしてこのリクエストが制限が解除されてから一度目かをRedisに問い合わせて返します。
 
 必要:
 送信するときに、API制限中かどうか。
@@ -77,6 +75,7 @@ func checkCanReply() (canTweet, isUnlocked bool) {
 	if err == redis.Nil {
 		nextResetStr = "0"
 		redisClient.Set(NoReply, "0", 0)
+		return true, false
 	} else if err != nil {
 		sentry.CaptureException(err)
 		return true, false // If error occurred on Redis, Try to replyId.

@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -29,7 +28,6 @@ import (
 
 var (
 	location = time.FixedZone("Asia/Tokyo", 9*60*60)
-	r        = regexp.MustCompile(`<a href=".*?" rel="nofollow">(.*?)</a>`)
 
 	botConfig      Config
 	id             int64
@@ -231,6 +229,9 @@ func main() {
 	// Initialize queueProcessor
 	queueProcessor = NewLookupQueue()
 	go queueProcessor.StartTicker()
+
+	// Start Message Queue Processor
+	go MessageSendTicker()
 
 	// Now start serving!
 	err = router.RunUnix("/var/run/twitter/bot.sock")
