@@ -31,5 +31,7 @@ require (
 	github.com/tomocrafter/go-twitter v0.0.0-20200524032136-e236ea578c8e
 	github.com/ziutek/mymysql v1.5.4 // indirect
 	golang.org/x/sys v0.0.0-20200523222454-059865788121 // indirect
+	golang.org/x/tools v0.0.0-20200901173145-80e1b0398e67 // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
+	gorm.io/gorm v1.20.0 // indirect
 )

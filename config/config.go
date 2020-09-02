@@ -1,5 +1,12 @@
-package main
+package config
 
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+)
+
+// Config represents configuration of entire program.
 type Config struct {
 	Twitter struct {
 		ConsumerKey       string `json:"consumer_key"`
@@ -24,4 +31,19 @@ type Config struct {
 	Sentry struct {
 		Dsn string `json:"dsn"`
 	} `json:"sentry"`
+}
+
+// LoadConfig loads the configuration of entire program from given file name.
+func LoadConfig(fileName string) (*Config, error) {
+	file, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("opening file: %v", err)
+	}
+
+	var c *Config
+	err = json.Unmarshal(file, c)
+	if err != nil {
+		return nil, fmt.Errorf("decoding json: %v", err)
+	}
+	return c, nil
 }
