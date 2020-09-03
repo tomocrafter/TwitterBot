@@ -1,0 +1,25 @@
+{
+	"twitter": {
+		"consumer_key": "CJn6wrBfTS8SLvXQQ1gvOfli",
+		"consumer_secret": "8L5JwbJ8gtJ5r2OX41mNG1MGzFA8rDn9eH2pnU6arcKdfKQ1R1",
+		"access_token": "XaoXWRkhQyozF3tPTLON8GkSCmW2qc50uFuPRx2ajIcE954xsp",
+		"access_token_secret": "dpzugyvrs0j2AFmuz6MXFkTbRa0mRnj3F3Nl0DKvLNa82"
+	},
+	"mysql": {
+		"db": "tomobotter",
+		"addr": "unix(/var/lib/mysql/mysql.sock)",
+		"user": "root",
+		"password": ""
+	},
+	"redis": {
+		"db": 1,
+		"addr": "/run/redis/redis.sock",
+		"password": ""
+	},
+	"path": {
+		"webhook": "/webhook"
+	},
+	"sentry": {
+		"dsn": ""
+	}	
+}
