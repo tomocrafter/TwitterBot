@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"TwitterBot/controllers"
+	"github.com/tomocrafter/TwitterBot/controllers"
 
 	"github.com/gin-gonic/gin"
 )

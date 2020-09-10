@@ -1,15 +1,15 @@
 package main
 
 import (
-	"github.com/getsentry/sentry-go"
-	"github.com/go-redis/redis"
-	"github.com/kyokomi/lottery"
-	"github.com/tomocrafter/go-twitter/twitter"
-	"log"
 	"math/rand"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/getsentry/sentry-go"
+	"github.com/go-redis/redis"
+	"github.com/kyokomi/lottery"
+	"github.com/tomocrafter/go-twitter/twitter"
 )
 
 type Item struct {
@@ -62,7 +62,7 @@ func OmikujiCommand(s CommandSender, _ []string) {
 	if err == redis.Nil {
 		index := lot.Lots(items...)
 		if index == -1 {
-			log.Fatalln("lot error")
+			logger.Fatal("lot error")
 		}
 
 		if index == 0 {

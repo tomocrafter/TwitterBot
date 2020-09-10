@@ -1,11 +1,11 @@
 package main
 
 import (
-	"log"
 	"regexp"
 	"strings"
 
 	"github.com/tomocrafter/go-twitter/twitter"
+	"go.uber.org/zap"
 )
 
 func listen(payloads chan interface{}) {
@@ -43,7 +43,10 @@ func listen(payloads chan interface{}) {
 				return
 			}
 
-			log.Println("TL @" + t.User.ScreenName + ": " + t.Text)
+			logger.Info("timeline updated",
+				zap.String("user", t.User.ScreenName),
+				zap.String("text", t.Text),
+			)
 
 			body := builder.String()
 

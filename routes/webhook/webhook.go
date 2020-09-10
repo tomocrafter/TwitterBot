@@ -1,8 +1,8 @@
 package webhook
 
 import (
-	"TwitterBot/config"
-	"log"
+	"github.com/tomocrafter/TwitterBot/config"
+	"go.uber.org/zap"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/gin-gonic/gin"
@@ -25,7 +25,7 @@ func SetTwitterWebhookRoutes(router *gin.RouterGroup, c *config.Config) {
 	handler, err := twitter.CreateWebhookHandler(payloads)
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Fatal("Error while creating webhook handler", err)
+		logger.Fatal("failed to create webhook handler", zap.Error(err))
 	}
 	router.POST(c.Path.Webhook, twitter.CreateTwitterAuthHandler(c.Twitter.ConsumerSecret), handler)
 

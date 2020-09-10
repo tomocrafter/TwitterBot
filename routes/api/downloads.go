@@ -1,7 +1,7 @@
 package api
 
 import (
-	"TwitterBot/controllers/api/downloads"
+	"github.com/tomocrafter/TwitterBot/controllers/api/downloads"
 
 	"github.com/gin-gonic/gin"
 )

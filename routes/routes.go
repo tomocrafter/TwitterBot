@@ -1,10 +1,10 @@
 package routes
 
 import (
-	"TwitterBot/config"
-	"TwitterBot/middlewares/cors"
-	"TwitterBot/routes/api"
-	"TwitterBot/routes/webhook"
+	"github.com/tomocrafter/TwitterBot/config"
+	"github.com/tomocrafter/TwitterBot/middlewares/cors"
+	"github.com/tomocrafter/TwitterBot/routes/api"
+	"github.com/tomocrafter/TwitterBot/routes/webhook"
 
 	"github.com/gin-gonic/gin"
 )

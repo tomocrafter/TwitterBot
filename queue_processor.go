@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"sync"
@@ -12,6 +11,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/go-redis/redis"
 	"github.com/tomocrafter/go-twitter/twitter"
+	"go.uber.org/zap"
 )
 
 type lookupQueue struct {
@@ -106,7 +106,7 @@ func (t *lookupQueue) Execute(n time.Time) {
 		ids = append(ids, id)
 	}
 
-	log.Printf("Looking up tweet(s): %v\n", ids)
+	logger.Info("looking up tweet(s)", zap.Int64s("ids", ids))
 
 	// fallback to the statuses/show endpoint if statuses/lookup endpoint is exceeded rate limit.
 	fallbackToShow := false

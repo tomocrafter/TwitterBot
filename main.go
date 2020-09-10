@@ -1,15 +1,16 @@
 package main
 
 import (
-	"TwitterBot/config"
-	"TwitterBot/routes"
 	"bufio"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/tomocrafter/TwitterBot/config"
+	"github.com/tomocrafter/TwitterBot/routes"
+	"go.uber.org/zap"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/go-gorp/gorp"
@@ -19,7 +20,7 @@ import (
 
 	"github.com/dghubble/oauth1"
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v8"
 	"github.com/tomocrafter/go-twitter/twitter"
 )
 
@@ -44,9 +45,11 @@ const (
 	ShowRateLimitReset = "show-rate-limit-reset"
 )
 
-func init() {
-	go loadDeniedClientList()
+var logger *zap.Logger
 
+func init() {
+	logger, _ = zap.NewProduction()
+	go loadDeniedClientList()
 }
 
 func escape(target string) string {
@@ -63,20 +66,20 @@ func escape(target string) string {
 func loadDeniedClientList() {
 	fp, err := os.OpenFile("denied_clients.txt", os.O_RDONLY|os.O_CREATE, 0660)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal("failed to open denied clients setting file", zap.Error(err))
 	}
 	defer fp.Close()
 
 	scanner := bufio.NewScanner(fp)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "#") { // Comment
+		if line[0] == '#' { // Comment
 			continue
 		}
 		deniedClients = append(deniedClients, line)
 	}
 	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+		logger.Fatal("failed to read denied clients setting file", zap.Error(err))
 	}
 }
 
@@ -91,11 +94,12 @@ func isDeniedClient(via string) bool {
 
 func main() {
 	var err error
+	defer logger.Sync()
 
 	// Load config
 	config, err := config.LoadConfig("config.json")
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal("failed to load config from file", zap.Error(err))
 	}
 
 	// Init sentry client
@@ -103,7 +107,10 @@ func main() {
 		Dsn: config.Sentry.Dsn,
 	})
 	if err != nil {
-		log.Fatal("sentry.Init: ", err)
+		logger.Fatal("failed to initilize sentry client",
+			zap.Error(err),
+			zap.String("dsn", config.Sentry.Dsn),
+		)
 	}
 
 	defer func() {
@@ -124,9 +131,9 @@ func main() {
 
 	user, _, err := client.Accounts.VerifyCredentials(nil)
 	if err != nil {
-		log.Fatal("Error white fetching user", err)
+		logger.Fatal("failed to fetch user", zap.Error(err))
 	}
-	log.Println("Logged in to @" + user.ScreenName)
+	logger.Info("successfully logged in", zap.String("user", user.ScreenName))
 	id = user.ID
 	user = nil
 
@@ -145,7 +152,7 @@ func main() {
 	if err != nil {
 		err = fmt.Errorf("an error occurred while running gin: %s", err)
 		sentry.CaptureException(err)
-		log.Fatal(err)
+		logger.Fatal("failed to start gin web server", zap.Error(err))
 	}
 }
 
